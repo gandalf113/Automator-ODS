@@ -38,7 +38,7 @@ public class Backend {
 		return clientData;
 	}
 
-	void UpdateProfileRow(Sheet sheet, int row) {
+	void UpdateProfileRow(Sheet sheet, String contractsDirPath, int row) {
 		String clientData = GetClientData(sheet, row);
 
 		System.out.println(clientData);
@@ -53,7 +53,7 @@ public class Backend {
 		System.out.println("");
 
 		// Find corresponding contract file (or files) by contractFilename
-		String path = "res/Zbiór umów komisowych ods";
+		String path = contractsDirPath;
 		String[] files = FindFile(path, contractFilename);
 
 		// If any files are found
@@ -128,7 +128,7 @@ public class Backend {
 		System.out.println("Sprzedana iloœc teraz: " + soldAmountCell.getValue());
 	}
 
-	void updateRows(File profileFile, String sheetName, int firstRow, int lastRow) {
+	void updateRows(File profileFile, String contractsDirPath, String sheetName, int firstRow, int lastRow) {
 		try {
 			SpreadSheet profile = new SpreadSheet(profileFile);
 			Sheet profileSheet = profile.getSheet(sheetName);
@@ -136,7 +136,7 @@ public class Backend {
 			System.out.println(profileSheet.getName());
 
 			for (int i = firstRow; i <= lastRow; i++) {
-				UpdateProfileRow(profileSheet, i);
+				UpdateProfileRow(profileSheet, contractsDirPath, i);
 				System.out.println("---------------------------");
 			}
 
