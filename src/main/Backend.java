@@ -15,6 +15,14 @@ import com.github.miachm.sods.SpreadSheet;
 // Get corresponding contract file and sheet 
 
 public class Backend {
+	private Main main;
+	private List<String> dialogMessages = new ArrayList<String>();
+	private boolean tempFolderNotFound;
+
+	public Backend(Main main) {
+		this.main = main;
+	}
+
 	String[] FindFile(String path, String filename) {
 		File dir = new File(path);
 		MyFilenameFilter filter = new MyFilenameFilter(filename.toLowerCase());
@@ -43,12 +51,22 @@ public class Backend {
 
 		System.out.println(clientData);
 
+		main.setMessage("Szukam dla " + clientData);
+
 		// Extract client data from cell
 		String[] clientDataSplit = clientData.split("/");
 
-		String contractFilename = clientDataSplit[0];
-		String contractSheetname = clientDataSplit[1];
-		int itemId = Integer.parseInt(clientDataSplit[2]);
+		String contractFilename = "", contractSheetname = "";
+		int itemId = 0;
+
+		try {
+			contractFilename = clientDataSplit[0];
+			contractSheetname = clientDataSplit[1];
+			itemId = Integer.parseInt(clientDataSplit[2]);
+		} catch (ArrayIndexOutOfBoundsException e) {
+			System.out.println("Wyraz " + clientData + " nie jest prawid³owy. Rozdziel dane klienta znakiem /");
+			dialogMessages.add("Wyraz " + clientData + " nie jest prawid³owy. Rozdziel dane klienta znakiem /");
+		}
 
 		System.out.println("");
 
@@ -60,7 +78,7 @@ public class Backend {
 		if (files != null) {
 
 			// Check if only a single file has been found
-			if (files.length > 0) {
+			if (files.length > 0 && files.length <= 1) {
 				File matchingContractFile = new File(path + "\\" + files[0]);
 
 				System.out.println("Szukam w pliku: " + files[0]);
@@ -68,6 +86,7 @@ public class Backend {
 
 				boolean success = true; // has saving the file succeeded?
 				File newContractFile = new File(path + "\\temp\\" + files[0]);
+				tempFolderNotFound = false;
 
 				// Get commiter value from contract sheet and paste it into profile
 				try {
@@ -91,8 +110,14 @@ public class Backend {
 					} catch (OutOfMemoryError e) {
 						success = false;
 						System.out.println(files[0] + " jest zbyt du¿y.");
+						dialogMessages.add(files[0] + " jest zbyt du¿y.");
+					} catch (FileNotFoundException e) {
+						success = false;
+						System.out.println("Folder temp musi istnieæ w folderze z umowami!");
+						tempFolderNotFound = true;
 					}
 				} catch (IOException e) {
+					dialogMessages.add("Nie mogê odnalezæ pliku umowy dla " + contractFilename);
 					e.printStackTrace();
 				}
 
@@ -104,20 +129,15 @@ public class Backend {
 					} catch (IOException e) {
 						e.printStackTrace();
 					}
-
 					System.out.println("Success!!");
 				} else {
 					System.out.println("Fail!!");
 				}
+			} else {
+				dialogMessages.add("Nie znaleziono pliku pasuj¹cego do " + contractFilename);
 			}
 		} else {
-			System.out.println("Znaleziono wiêcej ni¿ jeden plik!");
-
-			System.out.println("Znalezione pliki: ");
-
-			for (int i = 0; i < files.length; i++) {
-				System.out.println(files[i]);
-			}
+			dialogMessages.add("Nie znaleziono pliku pasuj¹cego do " + contractFilename);
 		}
 	}
 
@@ -133,21 +153,37 @@ public class Backend {
 			SpreadSheet profile = new SpreadSheet(profileFile);
 			Sheet profileSheet = profile.getSheet(sheetName);
 
-			System.out.println(profileSheet.getName());
-
+			int n = 0; // track progress
 			for (int i = firstRow; i <= lastRow; i++) {
+				int progress = n * 100 / (lastRow - firstRow);
+				System.out.println(progress);
+				main.setProgress(progress);
 				UpdateProfileRow(profileSheet, contractsDirPath, i);
+				n++;
 				System.out.println("---------------------------");
+				
+				if (tempFolderNotFound) {
+					dialogMessages.add("Folder temp musi istnieæ w folderze z umowami!");
+					main.setProgress(0);
+					main.setMessage("Nie znaleziono folderu temp");
+					main.showFinalErrors(dialogMessages);
+					return;
+				}
 			}
 
 			FixProfileFormulas(profile);
+			profile.trimSheets();
 			profile.save(new File("res/Kwiecieñ 2020.ods"));
+
+			main.setMessage("Gotowe!");
 		} catch (IOException e) {
 			if (e instanceof FileNotFoundException) {
 				System.out.println("Zamknij plik zestawienia w OpenOfficie!");
+				dialogMessages.add("Zamknij plik zestawienia w OpenOfficie!");
 			}
 			e.printStackTrace();
 		}
+		main.showFinalErrors(dialogMessages);
 	}
 
 	void FixProfileFormulas(SpreadSheet profile) {
@@ -236,7 +272,7 @@ public class Backend {
 
 	public List<String> GetSheets(String filepath) {
 		List<String> sheets = new ArrayList<String>();
-		
+
 		try {
 			SpreadSheet workbook = new SpreadSheet(new File(filepath));
 
@@ -246,7 +282,7 @@ public class Backend {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		
+
 		return sheets;
 
 	}

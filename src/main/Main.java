@@ -7,6 +7,9 @@ import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.Executors;
 
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
@@ -14,7 +17,9 @@ import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.SpinnerModel;
@@ -24,8 +29,9 @@ public class Main {
 
 	private JFrame frmAutomatorOds;
 	private Backend backend;
-	private JTextField contractFolderTextField;
-	private JTextField profileFileTextField;
+	private JTextField contractFolderTextField, profileFileTextField;
+	private JProgressBar progressBar;
+	private JLabel messageLabel;
 
 	private String profileFilePath, contractFolderPath, sheetName;
 
@@ -45,6 +51,38 @@ public class Main {
 		});
 	}
 
+	public void setMessage(String text) {
+		messageLabel.setText(text);
+	}
+
+	public void showSuccessDialog() {
+		JOptionPane.showMessageDialog(frmAutomatorOds, "Gotowe. Proces przebieg³ pomyœlnie.", "Sukces",
+				JOptionPane.INFORMATION_MESSAGE);
+	}
+
+	public void setProgress(int percentile) {
+		progressBar.setValue(percentile);
+	}
+
+	public void showFinalErrors(List<String> messages) {
+		if (messages.size() > 0) {
+			String finalMessage = "";
+			System.out.println("Errors!");
+			for (String message : messages) {
+				System.out.println(message);
+				finalMessage += message + "\n";
+			}
+			showErrorDialog(finalMessage);
+			messages.clear();
+		} else {
+			showSuccessDialog();
+		}
+	}
+
+	public void showErrorDialog(String message) {
+		JOptionPane.showMessageDialog(frmAutomatorOds, message, "Komunikat o b³êdach", JOptionPane.ERROR_MESSAGE);
+	}
+
 	/**
 	 * Create the application.
 	 */
@@ -56,7 +94,7 @@ public class Main {
 	 * Initialize the contents of the frame.
 	 */
 	private void initialize() {
-		backend = new Backend();
+		backend = new Backend(this);
 
 		frmAutomatorOds = new JFrame();
 		frmAutomatorOds.setTitle("Automator ODS - Komis Olu\u015B");
@@ -70,7 +108,7 @@ public class Main {
 		frmAutomatorOds.getContentPane().add(btnNewButton);
 
 		JPanel panel = new JPanel();
-		panel.setBounds(93, 156, 429, 172);
+		panel.setBounds(93, 137, 429, 172);
 		frmAutomatorOds.getContentPane().add(panel);
 		GridBagLayout gbl_panel = new GridBagLayout();
 		gbl_panel.columnWidths = new int[] { 162, 170, 70, 0 };
@@ -197,6 +235,14 @@ public class Main {
 		gbc_lastRowSpinner.gridy = 5;
 		panel.add(lastRowSpinner, gbc_lastRowSpinner);
 
+		progressBar = new JProgressBar();
+		progressBar.setBounds(93, 351, 429, 20);
+		frmAutomatorOds.getContentPane().add(progressBar);
+
+		messageLabel = new JLabel("");
+		messageLabel.setBounds(93, 328, 429, 13);
+		frmAutomatorOds.getContentPane().add(messageLabel);
+
 		btnNewButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				int firstRow = (int) (firstRowSpinner).getValue();
@@ -207,20 +253,28 @@ public class Main {
 				if (lastRow < firstRow) {
 					canProceed = false;
 					System.out.println("Ostatni wiersz musi byæ poni¿ej pierwszego");
+					showErrorDialog("Ostatni wiersz musi byæ poni¿ej pierwszego");
 				}
 				if (profileFilePath == null || contractFolderPath == null || profileSheetName == null) {
 					canProceed = false;
 					System.out.println("Uzupe³nij wszystkie pola!");
+					showErrorDialog("Uzupe³nij wszystkie pola!");
 				}
-				
+
 				if (profileSheetName.equals("zestawienie sprzeda¿y")) {
 					canProceed = false;
 					System.out.println("Wybierz inny arkusz ni¿ zestawienie sprzeda¿y.");
+					showErrorDialog("Wybierz inny arkusz ni¿ zestawienie sprzeda¿y.");
 				}
 
 				if (canProceed) {
-					backend.updateRows(new File(profileFilePath), contractFolderPath, profileSheetName, firstRow,
-							lastRow);
+					Executors.newSingleThreadExecutor().execute(new Runnable() {
+						@Override
+						public void run() {
+							backend.updateRows(new File(profileFilePath), contractFolderPath, profileSheetName,
+									firstRow, lastRow);
+						}
+					});
 				}
 
 			}
