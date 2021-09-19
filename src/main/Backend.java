@@ -3,6 +3,7 @@ package main;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -17,6 +18,11 @@ import com.github.miachm.sods.SpreadSheet;
 public class Backend {
 	private Main main;
 	private List<String> dialogMessages = new ArrayList<String>();
+
+	private List<SpreadSheet> contractsToBeSaved = new ArrayList<SpreadSheet>();
+	private List<File> contractTempPathsToBeSaved = new ArrayList<File>();
+	private List<File> contractFinalPathsToBeSaved = new ArrayList<File>();
+
 	private boolean tempFolderNotFound;
 
 	public Backend(Main main) {
@@ -84,7 +90,6 @@ public class Backend {
 				System.out.println("Szukam w pliku: " + files[0]);
 				System.out.println("");
 
-				boolean success = true; // has saving the file succeeded?
 				File newContractFile = new File(path + "\\temp\\" + files[0]);
 				tempFolderNotFound = false;
 
@@ -102,39 +107,21 @@ public class Backend {
 
 					setCommiterValue(sheet, row, commiterValue);
 
-					try {
-						updateContractSaleAmount(contractSheet, itemId);
-						FixContractFormulas(contract);
-//						contract.trimSheets();
-						contract.save(newContractFile);
-					} catch (OutOfMemoryError e) {
-						success = false;
-						System.out.println(files[0] + " jest zbyt du¿y.");
-						dialogMessages.add(files[0] + " jest zbyt du¿y.");
-					} catch (FileNotFoundException e) {
-						success = false;
-						System.out.println("Folder temp musi istnieæ w folderze z umowami!");
-						tempFolderNotFound = true;
-					}
+					updateContractSaleAmount(contractSheet, itemId);
+					FixContractFormulas(contract);
+
+					// Add contract to a list so it can be saved at the end
+					contractsToBeSaved.add(contract);
+					contractTempPathsToBeSaved.add(newContractFile);
+					contractFinalPathsToBeSaved.add(matchingContractFile);
+
 				} catch (IOException e) {
 					dialogMessages.add("Nie mogê odnalezæ pliku umowy dla " + contractFilename);
 					e.printStackTrace();
 				}
 
-				if (success) {
-
-					try {
-						Files.move(newContractFile.toPath(), matchingContractFile.toPath(),
-								StandardCopyOption.REPLACE_EXISTING);
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
-					System.out.println("Success!!");
-				} else {
-					System.out.println("Fail!!");
-				}
-			} else {
-				dialogMessages.add("Nie znaleziono pliku pasuj¹cego do " + contractFilename);
+			} else if (files.length > 1) {
+				dialogMessages.add("Znaleziono kilka plików pasuj¹cych do " + contractFilename + ". Nie wiem, który wybraæ!");
 			}
 		} else {
 			dialogMessages.add("Nie znaleziono pliku pasuj¹cego do " + contractFilename);
@@ -155,13 +142,18 @@ public class Backend {
 
 			int n = 0; // track progress
 			for (int i = firstRow; i <= lastRow; i++) {
-				int progress = n * 100 / (lastRow - firstRow);
+				int progress;
+				if (lastRow - firstRow != 0) {
+					progress = n * 100 / (lastRow - firstRow);
+				} else {
+					progress = 100;
+				}
 				System.out.println(progress);
 				main.setProgress(progress);
 				UpdateProfileRow(profileSheet, contractsDirPath, i);
 				n++;
 				System.out.println("---------------------------");
-				
+
 				if (tempFolderNotFound) {
 					dialogMessages.add("Folder temp musi istnieæ w folderze z umowami!");
 					main.setProgress(0);
@@ -175,27 +167,68 @@ public class Backend {
 			profile.trimSheets();
 			profile.save(new File("res/Kwiecieñ 2020.ods"));
 
+			// Save all contract files
+			for (int i = 0; i < contractsToBeSaved.size(); i++) {
+				SpreadSheet contract = contractsToBeSaved.get(i);
+				File outputFile = contractTempPathsToBeSaved.get(i);
+
+				main.setMessage("Zapisywanie umowy " + outputFile.getName());
+
+				boolean success = true; // has saving the file succeeded?
+
+				try {
+					contract.save(outputFile);
+				} catch (FileNotFoundException e) {
+					success = false;
+					System.out.println("Folder temp musi istnieæ w folderze z umowami!");
+					tempFolderNotFound = true;
+				} catch (OutOfMemoryError e) {
+					success = false;
+					System.out.println("Plik " + outputFile.getName() + " jest zbyt du¿y.");
+					dialogMessages.add("Plik " + outputFile.getName() + " jest zbyt du¿y.");
+				}
+
+				if (success) {
+					try {
+						Files.move(outputFile.toPath(), contractFinalPathsToBeSaved.get(i).toPath(),
+								StandardCopyOption.REPLACE_EXISTING);
+					} catch (java.nio.file.FileSystemException e) {
+						dialogMessages.add("Nie mo¿na zapisaæ pliku " + outputFile.getName()
+								+ " z folderu temp bo jest on otwarty w innym programie.");
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+					System.out.println("Successfuly saved " + contractFinalPathsToBeSaved.get(i).getName());
+				} else {
+					System.out.println("Failed saving " + contractFinalPathsToBeSaved.get(i).getName());
+				}
+			}
+
 			main.setMessage("Gotowe!");
 		} catch (IOException e) {
 			if (e instanceof FileNotFoundException) {
-				System.out.println("Zamknij plik zestawienia w OpenOfficie!");
 				dialogMessages.add("Zamknij plik zestawienia w OpenOfficie!");
+				main.setMessage("Zamknij wszystkie pliki w OpenOfficie i spróbuj ponownie.");
 			}
-			e.printStackTrace();
 		}
+		contractsToBeSaved.clear();
+		contractTempPathsToBeSaved.clear();
+		contractFinalPathsToBeSaved.clear();
 		main.showFinalErrors(dialogMessages);
 	}
 
 	void FixProfileFormulas(SpreadSheet profile) {
 		Sheet profileFirstSheet = profile.getSheet(0);
-		Range range = profileFirstSheet.getRange(2, 0, 32, 4);
+		Range range01 = profileFirstSheet.getRange(2, 0, 32, 4);
+		Range range02 = profileFirstSheet.getRange(9, 8, 1, 5);
 
-		String[][] formulas = range.getFormulas();
+		String[][] formulas01 = range01.getFormulas();
+		String[][] formulas02 = range02.getFormulas();
 
 		// Fix formulas on the first sheet
-		for (int i = 0; i < formulas.length; i++) {
-			for (int j = 0; j < formulas[i].length; j++) {
-				String formula = formulas[i][j];
+		for (int i = 0; i < formulas01.length; i++) {
+			for (int j = 0; j < formulas01[i].length; j++) {
+				String formula = formulas01[i][j];
 				if (formula == null)
 					continue;
 
@@ -203,8 +236,24 @@ public class Backend {
 					continue;
 				String newFormula = addChar(formula, '.', formula.length() - 2);
 
-				formulas[i][j] = newFormula;
-				System.out.println(formulas[i][j]);
+				formulas01[i][j] = newFormula;
+//				System.out.println(formulas01[i][j]);
+			}
+		}
+
+		for (int i = 0; i < formulas02.length; i++) {
+			for (int j = 0; j < formulas02[i].length; j++) {
+				String formula = formulas02[i][j];
+				if (formula == null)
+					continue;
+
+				if (formula.contains("."))
+					continue;
+				String newFormula = addChar(formula, '.', formula.length() - 3);
+				newFormula = addChar(newFormula, '.', formula.length() - 14);
+
+				formulas02[i][j] = newFormula;
+				System.out.println(formulas02[i][j]);
 			}
 		}
 
@@ -219,6 +268,8 @@ public class Backend {
 			for (int j = 0; j < f1s.length; j++) {
 				for (int j2 = 0; j2 < f1s[j].length; j2++) {
 					String formula = f1s[j][j2];
+					if (formula.contains("*100"))
+						continue;
 					String newFormula = formula.replace(",", "") + "*100";
 					f1s[j][j2] = newFormula;
 				}
@@ -231,6 +282,8 @@ public class Backend {
 			for (int j = 0; j < f2s.length; j++) {
 				for (int j2 = 0; j2 < f2s[j].length; j2++) {
 					String formula = f2s[j][j2];
+					if (formula.contains("*100"))
+						continue;
 					String newFormula = formula.replace(",", "") + "*100";
 					f2s[j][j2] = newFormula;
 				}
@@ -238,7 +291,8 @@ public class Backend {
 			r1.setFormulas(f1s);
 			r2.setFormulas(f2s);
 		}
-		range.setFormulas(formulas);
+		range01.setFormulas(formulas01);
+		range02.setFormulas(formulas02);
 	}
 
 	void FixContractFormulas(SpreadSheet contract) {
