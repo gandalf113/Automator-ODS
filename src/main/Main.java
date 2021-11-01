@@ -167,7 +167,6 @@ public class Main {
 			public void actionPerformed(ActionEvent e) {
 				JFileChooser fileChooser = new JFileChooser();
 				fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-				fileChooser.setCurrentDirectory(new File("res/"));
 				int result = fileChooser.showOpenDialog(panel);
 				if (result == JFileChooser.APPROVE_OPTION) {
 					File selectedFile = fileChooser.getSelectedFile();
@@ -285,7 +284,6 @@ public class Main {
 			public void actionPerformed(ActionEvent e) {
 				JFileChooser fileChooser = new JFileChooser();
 				fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-				fileChooser.setCurrentDirectory(new File("res/"));
 				int result = fileChooser.showOpenDialog(panel);
 				if (result == JFileChooser.APPROVE_OPTION) {
 					File selectedFile = fileChooser.getSelectedFile();

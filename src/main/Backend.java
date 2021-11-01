@@ -3,7 +3,6 @@ package main;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -23,15 +22,17 @@ public class Backend {
 	private List<File> contractTempPathsToBeSaved = new ArrayList<File>();
 	private List<File> contractFinalPathsToBeSaved = new ArrayList<File>();
 
-	private boolean tempFolderNotFound;
-
 	public Backend(Main main) {
 		this.main = main;
 	}
 
 	String[] FindFile(String path, String filename) {
 		File dir = new File(path);
-		MyFilenameFilter filter = new MyFilenameFilter(filename.toLowerCase());
+		System.out.println(path);
+
+		String fileToLookFor = filename.toLowerCase() + "-";
+		System.out.println(fileToLookFor + " vs " + filename.toLowerCase());
+		MyFilenameFilter filter = new MyFilenameFilter(fileToLookFor);
 
 		String[] flist = dir.list(filter);
 
@@ -59,12 +60,24 @@ public class Backend {
 
 		main.setMessage("Szukam dla " + clientData);
 
+		if (clientData == null) {
+			dialogMessages.add("Wiersz " + row + " w arkuszu " + sheet.getName() + " w pliku zestawienia jest pusty!");
+			return;
+		}
+
 		// Extract client data from cell
 		String[] clientDataSplit = clientData.split("/");
+
+		if (clientDataSplit.length != 3) {
+			dialogMessages
+					.add("Wyraz " + clientData + " jest niepoprawny. Dane musz¹ byæ podzielone na 3 czêœci znakiem /");
+			return;
+		}
 
 		String contractFilename = "", contractSheetname = "";
 		int itemId = 0;
 
+		// Try splitting client data into separate variables
 		try {
 			contractFilename = clientDataSplit[0];
 			contractSheetname = clientDataSplit[1];
@@ -91,7 +104,6 @@ public class Backend {
 				System.out.println("");
 
 				File newContractFile = new File(path + "\\temp\\" + files[0]);
-				tempFolderNotFound = false;
 
 				// Get commiter value from contract sheet and paste it into profile
 				try {
@@ -118,10 +130,14 @@ public class Backend {
 				} catch (IOException e) {
 					dialogMessages.add("Nie mogê odnalezæ pliku umowy dla " + contractFilename);
 					e.printStackTrace();
+				} catch (NullPointerException e) {
+					dialogMessages.add("Nie mo¿na odczytaæ dla " + contractFilename + ".");
+					e.printStackTrace();
 				}
 
 			} else if (files.length > 1) {
-				dialogMessages.add("Znaleziono kilka plików pasuj¹cych do " + contractFilename + ". Nie wiem, który wybraæ!");
+				dialogMessages
+						.add("Znaleziono kilka plików pasuj¹cych do " + contractFilename + ". Nie wiem, który wybraæ!");
 			}
 		} else {
 			dialogMessages.add("Nie znaleziono pliku pasuj¹cego do " + contractFilename);
@@ -153,19 +169,11 @@ public class Backend {
 				UpdateProfileRow(profileSheet, contractsDirPath, i);
 				n++;
 				System.out.println("---------------------------");
-
-				if (tempFolderNotFound) {
-					dialogMessages.add("Folder temp musi istnieæ w folderze z umowami!");
-					main.setProgress(0);
-					main.setMessage("Nie znaleziono folderu temp");
-					main.showFinalErrors(dialogMessages);
-					return;
-				}
 			}
 
 			FixProfileFormulas(profile);
 			profile.trimSheets();
-			profile.save(new File("res/Kwiecieñ 2020.ods"));
+			profile.save(profileFile);
 
 			// Save all contract files
 			for (int i = 0; i < contractsToBeSaved.size(); i++) {
@@ -181,7 +189,13 @@ public class Backend {
 				} catch (FileNotFoundException e) {
 					success = false;
 					System.out.println("Folder temp musi istnieæ w folderze z umowami!");
-					tempFolderNotFound = true;
+
+					dialogMessages.add("Folder temp musi istnieæ w folderze z umowami!");
+					main.setProgress(0);
+					main.setMessage("Nie znaleziono folderu temp!!");
+					main.showFinalErrors(dialogMessages);
+					return;
+
 				} catch (OutOfMemoryError e) {
 					success = false;
 					System.out.println("Plik " + outputFile.getName() + " jest zbyt du¿y.");
